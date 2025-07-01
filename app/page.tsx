@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Heart, Sparkles, Vote, Trophy, PenTool, User, Share, Flame, Clock } from "lucide-react"
-// import {
-//   useMiniKit,
-//   useAddFrame,
-//   useOpenUrl,
-// } from "@coinbase/onchainkit/minikit";
+import { Icon } from "./components/DemoComponents";
+import {
+  useMiniKit,
+  useAddFrame,
+} from "@coinbase/onchainkit/minikit";
 import {
   Name,
   Identity,
@@ -123,7 +123,49 @@ export default function HaikuApp() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   // const [isWalletConnected, setIsWalletConnected] = useState(true)
   const [votedHaikus, setVotedHaikus] = useState<Set<string>>(new Set())
+  const { setFrameReady, isFrameReady, context } = useMiniKit();
+   const [frameAdded, setFrameAdded] = useState(false);
 
+     const addFrame = useAddFrame();
+
+
+     useEffect(() => {
+       if (!isFrameReady) {
+         setFrameReady();
+       }
+     }, [setFrameReady, isFrameReady]);
+   
+     const handleAddFrame = useCallback(async () => {
+       const frameAdded = await addFrame();
+       setFrameAdded(Boolean(frameAdded));
+     }, [addFrame]);
+   
+     const saveFrameButton = useMemo(() => {
+       if (context && !context.client.added) {
+         return (
+           <Button
+             variant="ghost"
+             size="sm"
+             onClick={handleAddFrame}
+             className="text-[var(--app-accent)] p-4"
+           >
+             <Icon name="plus" size="sm" />
+             Save Frame
+           </Button>
+         );
+       }
+   
+       if (frameAdded) {
+         return (
+           <div className="flex items-center space-x-1 text-sm font-medium text-[#0052FF] animate-fade-out">
+             <Icon name="check" size="sm" className="text-[#0052FF]" />
+             <span>Saved</span>
+           </div>
+         );
+       }
+   
+       return null;
+     }, [context, frameAdded, handleAddFrame]);
   // Mock end times (24 hours from now)
   const haikuEndTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
   const votingEndTime = new Date(Date.now() + 18 * 60 * 60 * 1000) // 18 hours for demo
@@ -385,7 +427,7 @@ export default function HaikuApp() {
     const isComplete = incompleteHaiku.length === 3
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 font-poppins">
         {/* Timer */}
         <CountdownTimer endTime={haikuEndTime} label="Haiku closes in" />
 
@@ -863,7 +905,7 @@ export default function HaikuApp() {
             <button className="hover:text-slate-600">Terms</button>
             <button className="hover:text-slate-600">Privacy</button>
           </div>
-          <p className="text-xs text-slate-400">© 2024 Haiku. Built with ❤️ for poets.</p>
+          <p className="text-xs text-slate-400">© 2025 Haiku. Built with ❤️ for poets.</p>
         </div>
       </div>
     </footer>
@@ -882,7 +924,7 @@ export default function HaikuApp() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-slate-800">Haiku</h1>
-                <p className="text-xs text-slate-500 -mt-1">Collaborative Poetry</p>
+                {/* <p className="text-xs text-slate-500 -mt-1">Collaborative Poetry</p> */}
               </div>
             </div>
 
@@ -916,7 +958,7 @@ export default function HaikuApp() {
               )} */}
               <div className="flex items-center space-x-2">
               <Wallet className="z-10">
-                <ConnectWallet>
+                <ConnectWallet className="py-1">
                   <Name className="text-inherit" />
                 </ConnectWallet>
                 <WalletDropdown>
@@ -930,13 +972,14 @@ export default function HaikuApp() {
                 </WalletDropdown>
               </Wallet>
             </div>
+             <div>{saveFrameButton}</div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Navigation */}
-      <nav className="sticky top-[55px] bg-white/90 backdrop-blur-md  ">
+      <nav className="sticky top-[48px] bg-white/90 backdrop-blur-md  ">
         <div className="border-b border-slate-300">
           <div className="flex max-w-sm mx-auto px-4 ">
             {[
@@ -949,7 +992,7 @@ export default function HaikuApp() {
                 onClick={() => setCurrentState(key as AppState)}
                 className={`flex-1 flex flex-col items-center py-2 text-xs font-medium transition-colors ${
                   currentState === key
-                    ? "text-violet-600 border-b-2 border-violet-600"
+                    ? "text-violet-600 border-b-2 border-violet-600 font-semibold"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
               >

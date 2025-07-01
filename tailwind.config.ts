@@ -22,6 +22,7 @@ const config = {
       fontFamily: {
         sans: ["var(--font-inter)"],
         serif: ["var(--font-playfair)"],
+        poppins: ["var(--font-poppins)"],
       },
       colors: {
         border: "hsl(var(--border))",
