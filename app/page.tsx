@@ -8,15 +8,16 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Heart, Sparkles, Vote, Trophy, PenTool, User, Share, Flame, Clock } from "lucide-react"
-import {
-  useMiniKit,
-  useAddFrame,
-  useOpenUrl,
-} from "@coinbase/onchainkit/minikit";
+// import {
+//   useMiniKit,
+//   useAddFrame,
+//   useOpenUrl,
+// } from "@coinbase/onchainkit/minikit";
 import {
   Name,
   Identity,
   Address,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Avatar as OnchainAvatar,
   EthBalance,
 } from "@coinbase/onchainkit/identity";
@@ -120,7 +121,7 @@ export default function HaikuApp() {
   const [currentState, setCurrentState] = useState<AppState>("today")
   const [newLine, setNewLine] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isWalletConnected, setIsWalletConnected] = useState(true)
+  // const [isWalletConnected, setIsWalletConnected] = useState(true)
   const [votedHaikus, setVotedHaikus] = useState<Set<string>>(new Set())
 
   // Mock end times (24 hours from now)
