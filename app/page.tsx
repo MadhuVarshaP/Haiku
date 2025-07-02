@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Heart, Sparkles, Vote, Trophy, PenTool, User, Share, Flame, Clock } from "lucide-react"
+import { Heart, Sparkles, Vote, Trophy, PenTool, User, Share, Flame, Clock, Loader2 } from "lucide-react"
 import { Icon } from "./components/DemoComponents";
 import {
   useMiniKit,
@@ -17,7 +17,6 @@ import {
   Name,
   Identity,
   Address,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Avatar as OnchainAvatar,
   EthBalance,
 } from "@coinbase/onchainkit/identity";
@@ -27,6 +26,11 @@ import {
   WalletDropdown,
   WalletDropdownDisconnect,
 } from "@coinbase/onchainkit/wallet";
+
+// Add contract imports
+import { useAccount } from "wagmi";
+import { useWriteContracts, useCapabilities } from "wagmi/experimental";
+import { haikuABI, haikuAddress } from "../ABIs/haiku";
 
 type AppState = "today" | "voting" | "profile" | "leaderboard"
 
@@ -44,7 +48,6 @@ interface CompletedHaiku {
   hasVoted?: boolean
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface LeaderboardUser {
   id: string
   username: string
@@ -121,54 +124,97 @@ export default function HaikuApp() {
   const [currentState, setCurrentState] = useState<AppState>("today")
   const [newLine, setNewLine] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
-  // const [isWalletConnected, setIsWalletConnected] = useState(true)
   const [votedHaikus, setVotedHaikus] = useState<Set<string>>(new Set())
+  
+  // Contract state
+  const [txId, setTxId] = useState<string | undefined>(undefined)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  
+  // Hooks
   const { setFrameReady, isFrameReady, context } = useMiniKit();
-   const [frameAdded, setFrameAdded] = useState(false);
+  const [frameAdded, setFrameAdded] = useState(false);
+  const addFrame = useAddFrame();
+  
+  // Contract hooks
+  const account = useAccount();
+  const { writeContracts } = useWriteContracts({
+    mutation: { 
+      onSuccess: (id) => {
+        console.log("Transaction success, ID:", id, "Type:", typeof id)
+        setTxId(id)
+        setIsSubmitting(false)
+        // Clear form and close modal on success
+        setNewLine("")
+        setIsModalOpen(false)
+        setSubmitError(null)
+      },
+      onError: (error) => {
+        console.error("Contract write error:", error)
+        setIsSubmitting(false)
+        setSubmitError(error.message || "Failed to submit line")
+      }
+    },
+  });
 
-     const addFrame = useAddFrame();
+  const { data: availableCapabilities } = useCapabilities({
+    account: account.address,
+  });
 
+  const capabilities = useMemo(() => {
+    if (!availableCapabilities || !account.chainId) return {};
+    const chainCaps = availableCapabilities[account.chainId];
+    if (chainCaps?.PaymasterService?.supported) {
+      return {
+        PaymasterService: {
+          url: "/api/paymaster",
+        },
+      };
+    }
+    return {};
+  }, [availableCapabilities, account.chainId]);
 
-     useEffect(() => {
-       if (!isFrameReady) {
-         setFrameReady();
-       }
-     }, [setFrameReady, isFrameReady]);
-   
-     const handleAddFrame = useCallback(async () => {
-       const frameAdded = await addFrame();
-       setFrameAdded(Boolean(frameAdded));
-     }, [addFrame]);
-   
-     const saveFrameButton = useMemo(() => {
-       if (context && !context.client.added) {
-         return (
-           <Button
-             variant="ghost"
-             size="sm"
-             onClick={handleAddFrame}
-             className="text-[var(--app-accent)] p-4"
-           >
-             <Icon name="plus" size="sm" />
-             Save Frame
-           </Button>
-         );
-       }
-   
-       if (frameAdded) {
-         return (
-           <div className="flex items-center space-x-1 text-sm font-medium text-[#0052FF] animate-fade-out">
-             <Icon name="check" size="sm" className="text-[#0052FF]" />
-             <span>Saved</span>
-           </div>
-         );
-       }
-   
-       return null;
-     }, [context, frameAdded, handleAddFrame]);
+  useEffect(() => {
+    if (!isFrameReady) {
+      setFrameReady();
+    }
+  }, [setFrameReady, isFrameReady]);
+
+  const handleAddFrame = useCallback(async () => {
+    const frameAdded = await addFrame();
+    setFrameAdded(Boolean(frameAdded));
+  }, [addFrame]);
+
+  const saveFrameButton = useMemo(() => {
+    if (context && !context.client.added) {
+      return (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleAddFrame}
+          className="text-[var(--app-accent)] p-4"
+        >
+          <Icon name="plus" size="sm" />
+          Save Frame
+        </Button>
+      );
+    }
+
+    if (frameAdded) {
+      return (
+        <div className="flex items-center space-x-1 text-sm font-medium text-[#0052FF] animate-fade-out">
+          <Icon name="check" size="sm" className="text-[#0052FF]" />
+          <span>Saved</span>
+        </div>
+      );
+    }
+
+    return null;
+  }, [context, frameAdded, handleAddFrame]);
+
   // Mock end times (24 hours from now)
   const haikuEndTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
-  const votingEndTime = new Date(Date.now() + 18 * 60 * 60 * 1000) // 18 hours for demo
+  const votingEndTime = new Date(Date.now() + 18 * 60 * 60 * 1000)
 
   // Function to count syllables (simplified)
   const countSyllables = (text: string): number => {
@@ -180,7 +226,67 @@ export default function HaikuApp() {
     )
   }
 
-  // Mock data
+  // Updated handleSubmitLine function with contract integration
+  const handleSubmitLine = async () => {
+    if (!newLine.trim()) return;
+    
+    // Check if wallet is connected
+    if (!account.address) {
+      setSubmitError("Please connect your wallet first");
+      return;
+    }
+
+    const syllableCount = countSyllables(newLine);
+    const nextLineInfo = getNextLineType();
+    const requiredSyllables = nextLineInfo.syllableCount;
+    
+    if (syllableCount !== requiredSyllables) {
+      setSubmitError(`Line must have exactly ${requiredSyllables} syllables`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      writeContracts({
+        contracts: [
+          {
+            address: haikuAddress,
+            abi: haikuABI,
+            functionName: "submitLine",
+            args: [nextLineInfo.lineNumber, newLine],
+          },
+        ],
+        capabilities,
+      });
+    } catch (error) {
+      console.error("Error submitting line:", error);
+      setIsSubmitting(false);
+      setSubmitError("Failed to submit line. Please try again.");
+    }
+  }
+
+  const handleVote = (haikuId: string) => {
+    if (!votedHaikus.has(haikuId)) {
+      setVotedHaikus((prev) => new Set([...prev, haikuId]))
+      console.log(`Voted for haiku ${haikuId}`)
+    }
+  }
+
+  const handleShareToFarcaster = (haiku: any) => {
+    const haikuText = haiku.haikuLines.join("\n")
+    const shareText = `🌸 Beautiful haiku with ${haiku.votes} votes:\n\n${haikuText}\n\nCreated collaboratively on Haiku app`
+    console.log("Sharing to Farcaster:", shareText)
+  }
+
+  const getNextLineType = () => {
+    const lineNumber = incompleteHaiku.length + 1
+    const syllableCount = lineNumber === 1 ? 5 : lineNumber === 2 ? 7 : 5
+    return { lineNumber, syllableCount }
+  }
+
+  // Mock data (keep existing mock data)
   const incompleteHaiku: HaikuLine[] = [
     {
       text: "Cherry blossoms fall",
@@ -395,39 +501,39 @@ export default function HaikuApp() {
     ],
   }
 
-  const handleSubmitLine = () => {
-    if (newLine.trim()) {
-      setNewLine("")
-      setIsModalOpen(false)
-    }
-  }
+  // const handleSubmitLine = () => {
+  //   if (newLine.trim()) {
+  //     setNewLine("")
+  //     setIsModalOpen(false)
+  //   }
+  // }
 
-  const handleVote = (haikuId: string) => {
-    if (!votedHaikus.has(haikuId)) {
-      setVotedHaikus((prev) => new Set([...prev, haikuId]))
-      console.log(`Voted for haiku ${haikuId}`)
-    }
-  }
+  // const handleVote = (haikuId: string) => {
+  //   if (!votedHaikus.has(haikuId)) {
+  //     setVotedHaikus((prev) => new Set([...prev, haikuId]))
+  //     console.log(`Voted for haiku ${haikuId}`)
+  //   }
+  // }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleShareToFarcaster = (haiku: any) => {
-    const haikuText = haiku.haikuLines.join("\n")
-    const shareText = `🌸 Beautiful haiku with ${haiku.votes} votes:\n\n${haikuText}\n\nCreated collaboratively on Haiku app`
-    console.log("Sharing to Farcaster:", shareText)
-  }
+  // // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // const handleShareToFarcaster = (haiku: any) => {
+  //   const haikuText = haiku.haikuLines.join("\n")
+  //   const shareText = `🌸 Beautiful haiku with ${haiku.votes} votes:\n\n${haikuText}\n\nCreated collaboratively on Haiku app`
+  //   console.log("Sharing to Farcaster:", shareText)
+  // }
 
-  const getNextLineType = () => {
-    const lineNumber = incompleteHaiku.length + 1
-    const syllableCount = lineNumber === 1 ? 5 : lineNumber === 2 ? 7 : 5
-    return { lineNumber, syllableCount }
-  }
+  // const getNextLineType = () => {
+  //   const lineNumber = incompleteHaiku.length + 1
+  //   const syllableCount = lineNumber === 1 ? 5 : lineNumber === 2 ? 7 : 5
+  //   return { lineNumber, syllableCount }
+  // }
 
-  const renderTodayHaiku = () => {
+const renderTodayHaiku = () => {
     const { lineNumber, syllableCount } = getNextLineType()
     const isComplete = incompleteHaiku.length === 3
 
     return (
-      <div className="space-y-4 font-poppins">
+            <div className="space-y-4 font-poppins">
         {/* Timer */}
         <CountdownTimer endTime={haikuEndTime} label="Haiku closes in" />
 
@@ -470,6 +576,7 @@ export default function HaikuApp() {
             </div>
           </div>
         </div>
+
 
         {/* Haiku Lines */}
         <div className="space-y-4">
@@ -527,15 +634,16 @@ export default function HaikuApp() {
         </div>
 
         {/* Action Button */}
-        {!isComplete && (
+      {!isComplete && (
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
               <Button
                 size="lg"
                 className="w-full bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white shadow-lg rounded-2xl py-6 text-lg font-medium"
+                disabled={!account.address}
               >
                 <Sparkles className="w-5 h-5 mr-2" />
-                Contribute Line {lineNumber}
+                {!account.address ? "Connect Wallet to Contribute" : `Contribute Line ${lineNumber}`}
               </Button>
             </DialogTrigger>
             <DialogContent className="mx-4 rounded-2xl max-w-sm">
@@ -559,6 +667,7 @@ export default function HaikuApp() {
                   onChange={(e) => setNewLine(e.target.value)}
                   className="resize-none border-violet-200 focus:border-violet-400 rounded-xl font-serif"
                   rows={3}
+                  disabled={isSubmitting}
                 />
                 <div className="flex items-center justify-between text-sm bg-slate-50 rounded-xl p-3">
                   <span className="text-slate-600">
@@ -572,12 +681,42 @@ export default function HaikuApp() {
                     {newLine && countSyllables(newLine) === syllableCount ? "Perfect!" : "Keep going..."}
                   </span>
                 </div>
+
+                {/* Error Display */}
+                {submitError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                    <p className="text-sm text-red-600">{submitError}</p>
+                  </div>
+                )}
+
+                {/* Success Display */}
+                {txId && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                    <p className="text-sm text-green-600">Line submitted successfully!</p>
+                    {(() => {
+                      try {
+                        const txIdStr = typeof txId === 'string' ? txId : String(txId);
+                        return <p className="text-xs text-green-500 mt-1">TX: {txIdStr.slice(0, 10)}...</p>;
+                      } catch (error) {
+                        return <p className="text-xs text-green-500 mt-1">Transaction submitted!</p>;
+                      }
+                    })()}
+                  </div>
+                )}
+
                 <Button
                   onClick={handleSubmitLine}
                   className="w-full bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 rounded-xl py-3"
-                  disabled={!newLine.trim() || countSyllables(newLine) !== syllableCount}
+                  disabled={!newLine.trim() || countSyllables(newLine) !== syllableCount || isSubmitting || !account.address}
                 >
-                  Submit Line
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Line"
+                  )}
                 </Button>
               </div>
             </DialogContent>
