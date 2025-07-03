@@ -5,7 +5,7 @@ export function CallStatus({ id }: { id: string }) {
     id,
     query: {
       refetchInterval: (data) =>
-        data.state.data?.status === "CONFIRMED" ? false : 1000,
+        data.state.data?.status === "success" ? false : 1000,
     },
   });
   const { showCallsStatus } = useShowCallsStatus();

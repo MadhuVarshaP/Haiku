@@ -35,11 +35,11 @@ export function TransactButton<
         } else {
           setError(e.message);
         }
-        mutation.onError(error);
+        mutation?.onError?.(e);
       },
-      onSuccess: (id) => {
-        setId(id);
-        mutation.onSuccess(id);
+      onSuccess: (data) => {
+        setId(data.id);
+        mutation?.onSuccess?.(data);
       },
     },
   });
@@ -51,6 +51,7 @@ export function TransactButton<
       return "Confirm in popup";
     }
     return text;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, error]);
 
   return (

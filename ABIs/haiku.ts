@@ -675,6 +675,6 @@ export const haikuABI = [
 		"stateMutability": "view",
 		"type": "function"
 	}
-]
+] as const
 
 export const haikuAddress = "0x287DE14b776F62E17796D82AdDD152C0F2d07B04";
