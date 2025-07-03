@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-// import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Heart, Sparkles, Vote, Trophy, PenTool, User, Clock } from "lucide-react";
+import { Heart, Sparkles, Vote, Trophy, PenTool, User, Clock, Check } from "lucide-react";
 import SubmitLine from "./components/SubmitLine";
 import { countSyllables } from "@/lib/utils";
 
@@ -116,21 +115,29 @@ export default function HaikuApp() {
     }
   });
 
-  const { data: hasSubmitted } = useReadContract({
-  address: haikuAddress,
-  abi: haikuABI,
-  functionName: "hasSubmitted",
-  args: [account.address],
-  query: {
-    enabled: !!account.address,
-  }
-});
+  const { data: hasSubmitted, refetch: refetchHasSubmitted } = useReadContract({
+    address: haikuAddress,
+    abi: haikuABI,
+    functionName: "hasUserSubmittedToday",
+    args: [account.address as `0x${string}`],
+    query: {
+      enabled: !!account.address,
+    }
+  });
 
-useEffect(() => {
-  if (hasSubmitted !== undefined) {
-    setHasSubmittedToday(hasSubmitted);
-  }
-}, [hasSubmitted]);
+  useEffect(() => {
+    if (hasSubmitted !== undefined) {
+      setHasSubmittedToday(Boolean(hasSubmitted));
+    }
+  }, [hasSubmitted]);
+
+  // Refetch submission status when account changes
+  useEffect(() => {
+    if (account.address) {
+      refetchHasSubmitted();
+    }
+  }, [account.address, refetchHasSubmitted]);
+
   // MiniKit setup
   useEffect(() => {
     if (!isFrameReady) {
@@ -187,32 +194,31 @@ useEffect(() => {
   }
 
   // Convert contract data to display format
-// Convert contract data to display format
-const formatTodaysHaiku = (): HaikuLine[] => {
-  if (!todaysHaiku || !Array.isArray(todaysHaiku)) return [];
-  
-  const lines = todaysHaiku[0] as string[];
-  const authors = todaysHaiku[1] as string[];
-  const submittedLines = todaysHaiku[2] as bigint; // This is BigInt
-  
-  // Convert BigInt to number
-  const submittedLinesCount = Number(submittedLines);
-  
-  const haikuLines: HaikuLine[] = [];
-  
-  // Only process submitted lines
-  for (let i = 0; i < Math.min(submittedLinesCount, 3); i++) {
-    if (lines[i] && authors[i]) {
-      haikuLines.push({
-        text: lines[i],
-        author: authors[i],
-        syllables: countSyllables(lines[i]),
-      });
+  const formatTodaysHaiku = (): HaikuLine[] => {
+    if (!todaysHaiku || !Array.isArray(todaysHaiku)) return [];
+    
+    const lines = todaysHaiku[0] as readonly string[];
+    const authors = todaysHaiku[1] as readonly string[];
+    const submittedLines = todaysHaiku[2] as bigint;
+    
+    // Convert BigInt to number
+    const submittedLinesCount = Number(submittedLines);
+    
+    const haikuLines: HaikuLine[] = [];
+    
+    // Only process submitted lines
+    for (let i = 0; i < Math.min(submittedLinesCount, 3); i++) {
+      if (lines[i] && authors[i]) {
+        haikuLines.push({
+          text: lines[i],
+          author: authors[i],
+          syllables: countSyllables(lines[i]),
+        });
+      }
     }
+    
+    return haikuLines;
   }
-  
-  return haikuLines;
-}
 
   // Handle voting
   const handleVote = async (haikuId: string) => {
@@ -241,6 +247,13 @@ const formatTodaysHaiku = (): HaikuLine[] => {
     }
   }
 
+  // Handle submission success
+  const handleSubmissionSuccess = () => {
+    setIsModalOpen(false);
+    refetchTodaysHaiku();
+    refetchHasSubmitted();
+  };
+
   const renderTodayHaiku = () => {
     const completedLines = formatTodaysHaiku();
     const { lineNumber, syllableCount } = getNextLineType();
@@ -254,7 +267,7 @@ const formatTodaysHaiku = (): HaikuLine[] => {
         {/* Progress Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-800">Today's Progress</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Today&apos;s Progress</h2>
             <div className="flex space-x-2">
               {[1, 2, 3].map((step) => (
                 <div
@@ -323,41 +336,41 @@ const formatTodaysHaiku = (): HaikuLine[] => {
             </div>
           ))}
 
-{!isComplete && (
-  <div className="relative bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl p-4 border-2 border-dashed border-violet-200">
-    <div className="text-center space-y-3">
-      {hasSubmittedToday ? (
-        <>
-          <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center mx-auto">
-            <Check className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <p className="font-medium text-slate-700">You've contributed!</p>
-            <p className="text-sm text-slate-500">
-              Thank you for your submission
-            </p>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="w-12 h-12 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl flex items-center justify-center mx-auto">
-            <PenTool className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <p className="font-medium text-slate-700">Line {lineNumber} awaits</p>
-            <p className="text-sm text-slate-500">
-              {syllableCount} syllables needed
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-    <div className="absolute -left-3 top-1/2 transform -translate-y-1/2 w-7 h-7 bg-gradient-to-r from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
-      {lineNumber}
-    </div>
-  </div>
-)}
-    
+          {/* Next Line Placeholder */}
+          {!isComplete && (
+            <div className="relative bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl p-4 border-2 border-dashed border-violet-200">
+              <div className="text-center space-y-3">
+                {hasSubmittedToday ? (
+                  <>
+                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center mx-auto">
+                      <Check className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-700">You&apos;ve contributed!</p>
+                      <p className="text-sm text-slate-500">
+                        Thank you for your submission
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl flex items-center justify-center mx-auto">
+                      <PenTool className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-700">Line {lineNumber} awaits</p>
+                      <p className="text-sm text-slate-500">
+                        {syllableCount} syllables needed
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="absolute -left-3 top-1/2 transform -translate-y-1/2 w-7 h-7 bg-gradient-to-r from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
+                {lineNumber}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Button */}
@@ -367,10 +380,15 @@ const formatTodaysHaiku = (): HaikuLine[] => {
               <Button
                 size="lg"
                 className="w-full bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white shadow-lg rounded-2xl py-6 text-lg font-medium"
-                disabled={!account.address}
+                disabled={!account.address || hasSubmittedToday}
               >
                 <Sparkles className="w-5 h-5 mr-2" />
-                {!account.address ? "Connect Wallet to Contribute" : `Contribute Line ${lineNumber}`}
+                {hasSubmittedToday 
+                  ? "Already Submitted Today" 
+                  : !account.address 
+                    ? "Connect Wallet to Contribute" 
+                    : `Contribute Line ${lineNumber}`
+                }
               </Button>
             </DialogTrigger>
             <DialogContent className="mx-4 rounded-2xl max-w-sm">
@@ -383,10 +401,7 @@ const formatTodaysHaiku = (): HaikuLine[] => {
                 lineIndex={lineNumber - 1}
                 requiredSyllables={syllableCount}
                 currentHaiku={completedLines.map(l => l.text)}
-                onSuccess={() => {
-                  setIsModalOpen(false);
-                  refetchTodaysHaiku();
-                }}
+                onSuccess={handleSubmissionSuccess}
               />
             </DialogContent>
           </Dialog>
@@ -401,7 +416,7 @@ const formatTodaysHaiku = (): HaikuLine[] => {
                   <Sparkles className="w-10 h-10 text-white" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-semibold text-slate-800">Today's Completed Haiku</h3>
+                  <h3 className="text-2xl font-semibold text-slate-800">Today&apos;s Completed Haiku</h3>
                   <p className="text-sm text-slate-500">A collaborative masterpiece</p>
                 </div>
 
@@ -427,7 +442,7 @@ const formatTodaysHaiku = (): HaikuLine[] => {
                     <Sparkles className="w-4 h-4 mr-2" />
                     Stored onchain
                   </Badge>
-                  <p className="text-xs text-slate-500">Ready for tomorrow's voting</p>
+                  <p className="text-xs text-slate-500">Ready for tomorrow&apos;s voting</p>
                 </div>
               </div>
             </CardContent>
@@ -455,7 +470,7 @@ const formatTodaysHaiku = (): HaikuLine[] => {
         <CountdownTimer endTime={votingEndTime} label="Voting closes in" />
         
         <div className="text-center space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-800">Vote for Yesterday's Best</h2>
+          <h2 className="text-2xl font-semibold text-slate-800">Vote for Yesterday&apos;s Best</h2>
           <p className="text-slate-600">Choose your favorite collaborative haiku</p>
         </div>
 
@@ -538,16 +553,22 @@ const formatTodaysHaiku = (): HaikuLine[] => {
               <p className="text-xs text-slate-500">Votes</p>
             </div>
             <div className="bg-white rounded-xl p-3">
-              <p className="text-2xl font-bold text-emerald-500">-</p>
-              <p className="text-xs text-slate-500">Haiku</p>
+              <p className="text-2xl font-bold text-emerald-500">
+                {hasSubmittedToday ? "1" : "0"}
+              </p>
+              <p className="text-xs text-slate-500">Today</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <div className="bg-slate-50 rounded-2xl p-4 text-center">
-        <p className="text-slate-500">No contributions yet.</p>
-        <p className="text-sm text-slate-400 mt-2">Start contributing to today's haiku!</p>
+        <p className="text-slate-500">
+          {hasSubmittedToday ? "You've contributed today!" : "No contributions yet."}
+        </p>
+        <p className="text-sm text-slate-400 mt-2">
+          {hasSubmittedToday ? "Thank you for your submission!" : "Start contributing to today's haiku!"}
+        </p>
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { useWriteContracts, useCapabilities } from "wagmi/experimental";
 import { haikuABI, haikuAddress } from "../../ABIs/haiku";
 import { countSyllables } from "@/lib/utils";
@@ -25,34 +25,11 @@ export default function SubmitLine({
   const [line, setLine] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [txId, setTxId] = useState<string | undefined>(undefined);
-
+  
   const account = useAccount();
-
-  const { writeContracts } = useWriteContracts({
-    mutation: {
-      onSuccess: (data) => {
-        console.log("✅ TX ID:", data.id);
-        setTxId(data.id);
-        setIsSubmitting(false);
-        setSubmitError(null);
-        onSuccess();
-      },
-      onError: (error) => {
-        console.error("❌ TX failed:", error?.cause || error);
-        setIsSubmitting(false);
-        const errorMessage = error.message || "Failed to submit line";
-
-        if (errorMessage.includes("You already submitted a line today")) {
-          setSubmitError("You've already submitted a line today");
-          onSuccess();
-        } else {
-          setSubmitError(errorMessage);
-        }
-      }
-    }
-  });
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const publicClient = usePublicClient();
+  const { writeContracts } = useWriteContracts();
   const { data: availableCapabilities } = useCapabilities({
     account: account.address,
   });
@@ -64,7 +41,7 @@ export default function SubmitLine({
       return {
         PaymasterService: {
           url: `${window.location.origin}/api/paymaster`,
-        },
+        }
       };
     }
     return {};
@@ -72,7 +49,7 @@ export default function SubmitLine({
 
   const currentSyllables = countSyllables(line);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!line.trim()) {
       setSubmitError("Please enter a line");
       return;
@@ -88,18 +65,43 @@ export default function SubmitLine({
       return;
     }
 
-    setIsSubmitting(true);
-    setSubmitError(null);
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+      
+      await writeContracts({
+        contracts: [{
+          address: haikuAddress,
+          abi: haikuABI,
+          functionName: "submitLine",
+          args: [BigInt(lineIndex), line],
+        }],
+        capabilities,
+      });
 
-    writeContracts({
-      contracts: [{
-        address: haikuAddress,
-        abi: haikuABI,
-        functionName: "submitLine",
-        args: [BigInt(lineIndex), line],
-      }],
-      capabilities,
-    });
+      // Transaction was submitted successfully
+      onSuccess();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.error("Error submitting line:", error);
+      let errorMessage = "Failed to submit line";
+      
+      if (error?.cause?.message) {
+        if (error.cause.message.includes("You already submitted a line today")) {
+          errorMessage = "You've already submitted today";
+        } else if (error.cause.message.includes("Line already submitted")) {
+          errorMessage = "This line has already been submitted";
+        } else {
+          errorMessage = error.cause.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setSubmitError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -112,7 +114,6 @@ export default function SubmitLine({
           </p>
         ))}
       </div>
-
       <Textarea
         placeholder={`Enter your ${requiredSyllables}-syllable line...`}
         value={line}
@@ -121,7 +122,6 @@ export default function SubmitLine({
         rows={3}
         disabled={isSubmitting}
       />
-
       <div className="flex items-center justify-between text-sm bg-slate-50 rounded-xl p-3">
         <span className="text-slate-600">
           Syllables: {currentSyllables}/{requiredSyllables}
@@ -134,13 +134,6 @@ export default function SubmitLine({
       {submitError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-3">
           <p className="text-sm text-red-600">{submitError}</p>
-        </div>
-      )}
-
-      {txId && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-          <p className="text-sm text-green-600">Line submitted successfully!</p>
-          <p className="text-xs text-green-500 mt-1">TX: {String(txId).slice(0, 10)}...</p>
         </div>
       )}
 
