@@ -292,11 +292,7 @@ const HaikuApp = () => {
     }
   });
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('haikuEndTime', haikuEndTime.toISOString());
-    }
-  }, [haikuEndTime]);
+
 
   const { setFrameReady, isFrameReady, context } = useMiniKit();
   const [frameAdded, setFrameAdded] = useState(false);
