@@ -98,6 +98,7 @@ const SubmitLine = ({
   const [txStatus, setTxStatus] = useState<null | 'pending' | 'waiting' | 'success' | 'error'>(null);
   
   const account = useAccount();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const publicClient = usePublicClient();
   const { writeContracts } = useWriteContracts();
   const { data: availableCapabilities } = useCapabilities({
@@ -155,6 +156,7 @@ const SubmitLine = ({
       console.error("Error submitting line:", err);
       setTxStatus('error');
       let errorMessage = "Failed to submit line";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const error = err as any;
       if (error?.cause?.data?.message?.includes("Line already submitted")) {
         errorMessage = "This line has already been submitted by someone else";
@@ -228,6 +230,7 @@ const SubmitLine = ({
 const HaikuApp = () => {
   // Move all hooks to the top level
   const account = useAccount();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const publicClient = usePublicClient();
   const { writeContracts } = useWriteContracts();
   const { data: availableCapabilities } = useCapabilities({
@@ -391,6 +394,7 @@ const HaikuApp = () => {
   }, [context, frameAdded, handleAddFrame]);
 
   const getNextLineType = () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const completedLines = formatTodaysHaiku();
     const lineNumber = nextLineNumber !== undefined ? Number(nextLineNumber) + 1 : 1;
     const syllableCount = lineNumber === 2 ? 7 : 5;
@@ -690,7 +694,7 @@ const HaikuApp = () => {
         <div className="space-y-4">
           <CountdownTimer endTime={votingEndTime} label="Voting opens in" />
           <div className="bg-slate-50 rounded-2xl p-4 text-center">
-            <p className="text-slate-500">Yesterday's haiku wasn't completed</p>
+            <p className="text-slate-500">Yesterday&apos;s haiku wasn&apos;t completed</p>
             <p className="text-sm text-slate-400 mt-2">No voting available today</p>
           </div>
         </div>
