@@ -35,6 +35,12 @@ interface CompletedHaiku {
 
 type AppState = "today" | "voting" | "profile" | "leaderboard";
 
+function getNextMidnightUTC() {
+  const now = new Date();
+  const nextMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  return nextMidnight;
+}
+
 // Countdown Timer Component
 const CountdownTimer = ({ endTime, label }: { endTime: Date; label: string }) => {
   const [timeLeft, setTimeLeft] = useState("00:00:00");
@@ -241,10 +247,7 @@ const HaikuApp = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [votedHaikus, setVotedHaikus] = useState<Set<string>>(new Set());
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
-  const [haikuEndTime] = useState(() => {
-    const savedTime = typeof window !== 'undefined' ? localStorage.getItem('haikuEndTime') : null;
-    return savedTime ? new Date(savedTime) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-  });
+  const [haikuEndTime] = useState(() => getNextMidnightUTC());
   const [votingEndTime] = useState(() => new Date(haikuEndTime.getTime() - 6 * 60 * 60 * 1000));
   const [isVoting, setIsVoting] = useState(false);
   const [votingError, setVotingError] = useState<string | null>(null);
