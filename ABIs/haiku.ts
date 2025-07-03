@@ -136,7 +136,7 @@ export const haikuABI = [
 		"inputs": [
 			{
 				"internalType": "uint8",
-				"name": "lineNumber",
+				"name": "expectedLineNumber",
 				"type": "uint8"
 			},
 			{
@@ -146,6 +146,19 @@ export const haikuABI = [
 			}
 		],
 		"name": "submitLine",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "line",
+				"type": "string"
+			}
+		],
+		"name": "submitLineAuto",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -354,6 +367,19 @@ export const haikuABI = [
 				"internalType": "bool",
 				"name": "isWinning",
 				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getNextLineNumber",
+		"outputs": [
+			{
+				"internalType": "uint8",
+				"name": "",
+				"type": "uint8"
 			}
 		],
 		"stateMutability": "view",
@@ -677,4 +703,4 @@ export const haikuABI = [
 	}
 ] as const
 
-export const haikuAddress = "0x287DE14b776F62E17796D82AdDD152C0F2d07B04";
+export const haikuAddress = "0x57278009A7967473307430D56d7Bff10e0A9fFd4";
