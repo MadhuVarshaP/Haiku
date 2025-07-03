@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Name, Identity, Address, Avatar as OnchainAvatar, EthBalance } from "@coinbase/onchainkit/identity";
 import { ConnectWallet, Wallet as WalletComponent, WalletDropdown, WalletDropdownDisconnect } from "@coinbase/onchainkit/wallet";
 import { useMiniKit, useAddFrame } from "@coinbase/onchainkit/minikit";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { writeContracts } from "viem/experimental";
 
 interface HaikuLine {
@@ -24,6 +25,7 @@ interface HaikuLine {
   syllables: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface CompletedHaiku {
   id: string;
   lines: HaikuLine[];
@@ -138,7 +140,7 @@ const SubmitLine = ({
       setSubmitError(null);
       setTxStatus('pending');
       
-      const result = await writeContracts({
+      await writeContracts({
         contracts: [{
           address: haikuAddress,
           abi: haikuABI,
@@ -147,30 +149,13 @@ const SubmitLine = ({
         }],
         capabilities,
       });
-
-      setTxStatus('waiting');
-      
-      if (result && publicClient) {
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash: result,
-        });
-        
-        if (receipt.status === 'success') {
-          setTxStatus('success');
-          onSuccess();
-        } else {
-          setTxStatus('error');
-          throw new Error("Transaction failed");
-        }
-      } else if (result && !publicClient) {
-        throw new Error("Public client not available");
-      }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      console.error("Error submitting line:", error);
+      setTxStatus('success');
+      onSuccess();
+    } catch (err) {
+      console.error("Error submitting line:", err);
       setTxStatus('error');
       let errorMessage = "Failed to submit line";
-      
+      const error = err as any;
       if (error?.cause?.data?.message?.includes("Line already submitted")) {
         errorMessage = "This line has already been submitted by someone else";
         onSuccess();
@@ -180,10 +165,9 @@ const SubmitLine = ({
         } else {
           errorMessage = error.cause.message;
         }
-      } else if (error.message) {
+      } else if (error?.message) {
         errorMessage = error.message;
       }
-      
       setSubmitError(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -242,6 +226,13 @@ const SubmitLine = ({
 };
 
 const HaikuApp = () => {
+  // Move all hooks to the top level
+  const account = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContracts } = useWriteContracts();
+  const { data: availableCapabilities } = useCapabilities({
+    account: account.address,
+  });
   const [currentState, setCurrentState] = useState<AppState>("today");
   const [isModalOpen, setIsModalOpen] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -255,6 +246,46 @@ const HaikuApp = () => {
   const [isVoting, setIsVoting] = useState(false);
   const [votingError, setVotingError] = useState<string | null>(null);
 
+  // Move all hooks to the top level
+  const { data: yesterdaysHaiku } = useReadContract({
+    address: haikuAddress,
+    abi: haikuABI,
+    functionName: "getYesterdaysHaiku",
+    query: {
+      enabled: currentState === "voting" && !!account.address,
+    }
+  });
+
+  const { data: hasVoted } = useReadContract({
+    address: haikuAddress,
+    abi: haikuABI,
+    functionName: "hasVotedOnDay",
+    args: [account.address as `0x${string}`, (yesterdaysHaiku?.[3] !== undefined ? BigInt(yesterdaysHaiku[3] as number) : BigInt(0))],
+    query: {
+      enabled: currentState === "voting" && !!account.address && !!yesterdaysHaiku,
+    }
+  });
+
+  const { data: userStreak } = useReadContract({
+    address: haikuAddress,
+    abi: haikuABI,
+    functionName: "getUserStreak",
+    args: [account.address as `0x${string}`],
+    query: {
+      enabled: currentState === "profile" && !!account.address,
+    }
+  });
+
+  const { data: winners } = useReadContract({
+    address: haikuAddress,
+    abi: haikuABI,
+    functionName: "getDayWinners",
+    args: [BigInt(0)], // Get latest winners
+    query: {
+      enabled: currentState === "leaderboard",
+    }
+  });
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('haikuEndTime', haikuEndTime.toISOString());
@@ -264,9 +295,6 @@ const HaikuApp = () => {
   const { setFrameReady, isFrameReady, context } = useMiniKit();
   const [frameAdded, setFrameAdded] = useState(false);
   const addFrame = useAddFrame();
-  
-  const account = useAccount();
-  const publicClient = usePublicClient();
   
   const { data: todaysHaiku, refetch: refetchTodaysHaiku } = useReadContract({
     address: haikuAddress,
@@ -363,7 +391,6 @@ const HaikuApp = () => {
   }, [context, frameAdded, handleAddFrame]);
 
   const getNextLineType = () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const completedLines = formatTodaysHaiku();
     const lineNumber = nextLineNumber !== undefined ? Number(nextLineNumber) + 1 : 1;
     const syllableCount = lineNumber === 2 ? 7 : 5;
@@ -392,6 +419,41 @@ const HaikuApp = () => {
     return haikuLines;
   }
 
+  const formatYesterdaysHaiku = (): HaikuLine[] => {
+    if (!yesterdaysHaiku || !Array.isArray(yesterdaysHaiku)) return [];
+    
+    const lines = yesterdaysHaiku[0] as readonly string[];
+    const authors = yesterdaysHaiku[1] as readonly string[];
+    const submittedLines = typeof yesterdaysHaiku[3] === 'bigint' ? Number(yesterdaysHaiku[3]) : (yesterdaysHaiku[3] as number);
+    
+    const haikuLines: HaikuLine[] = [];
+    
+    for (let i = 0; i < Math.min(submittedLines, 3); i++) {
+      if (lines[i] && authors[i]) {
+        haikuLines.push({
+          text: lines[i],
+          author: authors[i],
+          syllables: countSyllables(lines[i]),
+        });
+      }
+    }
+    
+    return haikuLines;
+  };
+
+  const capabilities = useMemo(() => {
+    if (!availableCapabilities || !account.chainId) return {};
+    const chainCaps = availableCapabilities[account.chainId];
+    if (chainCaps?.paymasterService?.supported) {
+      return {
+        PaymasterService: {
+          url: `${window.location.origin}/api/paymaster`,
+        }
+      };
+    }
+    return {};
+  }, [availableCapabilities, account.chainId]);
+
   const handleVote = async () => {
     if (!account.address) {
       setVotingError("Please connect your wallet first");
@@ -402,7 +464,7 @@ const HaikuApp = () => {
       setIsVoting(true);
       setVotingError(null);
       
-      const result = await writeContracts({
+      await writeContracts({
         contracts: [{
           address: haikuAddress,
           abi: haikuABI,
@@ -410,20 +472,8 @@ const HaikuApp = () => {
         }],
         capabilities,
       });
-
-      if (result && publicClient) {
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash: result,
-        });
-        
-        if (receipt.status === 'success') {
-          setVotedHaikus(prev => new Set([...prev, "yesterday"]));
-        } else {
-          throw new Error("Transaction failed");
-        }
-      } else if (result && !publicClient) {
-        throw new Error("Public client not available");
-      }
+      // No result to check, just refetch or update state
+      setVotedHaikus(prev => new Set([...prev, "yesterday"]));
     } catch (error) {
       console.error("Error voting:", error);
       setVotingError("Failed to vote. Please try again.");
@@ -632,133 +682,79 @@ const HaikuApp = () => {
   }
 
   const renderVoting = () => {
-  // Move all hooks to the top level
-  const { data: yesterdaysHaiku } = useReadContract({
-    address: haikuAddress,
-    abi: haikuABI,
-    functionName: "getYesterdaysHaiku",
-    query: {
-      enabled: !!account.address,
+    const completedLines = formatYesterdaysHaiku();
+    const isComplete = completedLines.length === 3;
+
+    if (!isComplete) {
+      return (
+        <div className="space-y-4">
+          <CountdownTimer endTime={votingEndTime} label="Voting opens in" />
+          <div className="bg-slate-50 rounded-2xl p-4 text-center">
+            <p className="text-slate-500">Yesterday's haiku wasn't completed</p>
+            <p className="text-sm text-slate-400 mt-2">No voting available today</p>
+          </div>
+        </div>
+      );
     }
-  });
 
-  const { data: hasVoted } = useReadContract({
-    address: haikuAddress,
-    abi: haikuABI,
-    functionName: "hasVotedOnDay",
-    args: [account.address as `0x${string}`, yesterdaysHaiku?.[3] as bigint || BigInt(0)],
-    query: {
-      enabled: !!account.address && !!yesterdaysHaiku,
-    }
-  });
-
-  const formatYesterdaysHaiku = (): HaikuLine[] => {
-    if (!yesterdaysHaiku || !Array.isArray(yesterdaysHaiku)) return [];
-    
-    const lines = yesterdaysHaiku[0] as readonly string[];
-    const authors = yesterdaysHaiku[1] as readonly string[];
-    const submittedLines = yesterdaysHaiku[3] as number;
-    const votes = yesterdaysHaiku[2] as number;
-    
-    const haikuLines: HaikuLine[] = [];
-    
-    for (let i = 0; i < Math.min(submittedLines, 3); i++) {
-      if (lines[i] && authors[i]) {
-        haikuLines.push({
-          text: lines[i],
-          author: authors[i],
-          syllables: countSyllables(lines[i]),
-        });
-      }
-    }
-    
-    return haikuLines;
-  };
-
-  const completedLines = formatYesterdaysHaiku();
-  const isComplete = completedLines.length === 3;
-
-  if (!isComplete) {
     return (
       <div className="space-y-4">
-        <CountdownTimer endTime={votingEndTime} label="Voting opens in" />
-        <div className="bg-slate-50 rounded-2xl p-4 text-center">
-          <p className="text-slate-500">Yesterday's haiku wasn't completed</p>
-          <p className="text-sm text-slate-400 mt-2">No voting available today</p>
+        <CountdownTimer endTime={votingEndTime} label="Voting closes in" />
+        
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-semibold text-slate-800">Vote for Yesterday&apos;s Best</h2>
+          <p className="text-slate-600">Choose your favorite collaborative haiku</p>
+        </div>
+
+        <div className="space-y-4">
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl">
+            <CardContent className="p-4">
+              <div className="text-center space-y-4 mb-6">
+                {completedLines.map((line, index) => (
+                  <div key={index} className="space-y-1">
+                    <p className="font-serif text-lg text-slate-800 leading-relaxed">{line.text}</p>
+                    <p className="text-xs text-slate-500">{line.author}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div className="flex items-center space-x-2">
+                  <Heart className="w-5 h-5 text-rose-400" />
+                  <span className="font-semibold text-slate-700">Votes: {yesterdaysHaiku?.[2]?.toString() || 0}</span>
+                </div>
+
+                <Button
+                  onClick={handleVote}
+                  disabled={hasVoted || isVoting}
+                  className={`rounded-xl px-6 py-2 font-medium ${
+                    hasVoted
+                      ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : "bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white"
+                  }`}
+                >
+                  {hasVoted ? "Voted ✓" : "Vote"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {votingError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+            <p className="text-sm text-red-600">{votingError}</p>
+          </div>
+        )}
+
+        <div className="text-center text-slate-500 bg-slate-50 p-4 rounded-2xl">
+          <Vote className="w-4 h-4 inline mr-2 text-slate-400" />
+          <span className="text-sm">Votes are stored onchain — one vote per haiku</span>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <CountdownTimer endTime={votingEndTime} label="Voting closes in" />
-      
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-semibold text-slate-800">Vote for Yesterday&apos;s Best</h2>
-        <p className="text-slate-600">Choose your favorite collaborative haiku</p>
-      </div>
-
-      <div className="space-y-4">
-        <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl">
-          <CardContent className="p-4">
-            <div className="text-center space-y-4 mb-6">
-              {completedLines.map((line, index) => (
-                <div key={index} className="space-y-1">
-                  <p className="font-serif text-lg text-slate-800 leading-relaxed">{line.text}</p>
-                  <p className="text-xs text-slate-500">{line.author}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-              <div className="flex items-center space-x-2">
-                <Heart className="w-5 h-5 text-rose-400" />
-                <span className="font-semibold text-slate-700">Votes: {yesterdaysHaiku?.[2]?.toString() || 0}</span>
-              </div>
-
-              <Button
-                onClick={handleVote}
-                disabled={hasVoted || isVoting}
-                className={`rounded-xl px-6 py-2 font-medium ${
-                  hasVoted
-                    ? "bg-slate-100 text-slate-500 cursor-not-allowed"
-                    : "bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white"
-                }`}
-              >
-                {hasVoted ? "Voted ✓" : "Vote"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {votingError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
-          <p className="text-sm text-red-600">{votingError}</p>
-        </div>
-      )}
-
-      <div className="text-center text-slate-500 bg-slate-50 p-4 rounded-2xl">
-        <Vote className="w-4 h-4 inline mr-2 text-slate-400" />
-        <span className="text-sm">Votes are stored onchain — one vote per haiku</span>
-      </div>
-    </div>
-  );
-}
-
   const renderProfile = () => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const { data: userStreak } = useReadContract({
-      address: haikuAddress,
-      abi: haikuABI,
-      functionName: "getUserStreak",
-      args: [account.address as `0x${string}`],
-      query: {
-        enabled: !!account.address,
-      }
-    });
-
     return (
       <div className="space-y-4">
         <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 rounded-2xl">
@@ -807,14 +803,6 @@ const HaikuApp = () => {
   }
 
   const renderLeaderboard = () => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const { data: winners } = useReadContract({
-      address: haikuAddress,
-      abi: haikuABI,
-      functionName: "getDayWinners",
-      args: [BigInt(0)], // Get latest winners
-    });
-
     return (
       <div className="space-y-4">
         <div className="text-center space-y-2">
